@@ -1,0 +1,6 @@
+npm run lint
+
+npm run build
+git add -A
+git commit -m "Remove Capacitor config from Vercel build"
+git push origin main
