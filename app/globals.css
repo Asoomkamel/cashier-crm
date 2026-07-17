@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  height: 100%;
+}
+
+@media print {
+  .no-print { display: none !important; }
+
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #invoice-print,
+  #invoice-print *,
+  .print-root,
+  .print-root * {
+    visibility: visible;
+  }
+
+  #invoice-print,
+  .print-root {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: none !important;
+    background: #fff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+
+  .print-root {
+    padding: 8mm !important;
+  }
+
+
+  #invoice-print {
+    position: relative !important;
+    inset: auto !important;
+    overflow: visible !important;
+  }
+
+  #invoice-print .invoice-print-header,
+  #invoice-print .invoice-print-totals,
+  #invoice-print .invoice-print-signatures,
+  #invoice-print .invoice-print-qr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #invoice-print .print-no-scroll {
+    overflow: visible !important;
+  }
+
+  .fixed {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  .fixed > div {
+    max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-shadow: none !important;
+  }
+
+  #invoice-print table.invoice-print-table {
+    width: 100% !important;
+    break-inside: auto;
+  }
+
+  #invoice-print table.invoice-print-table thead {
+    display: table-header-group;
+  }
+
+  #invoice-print table.invoice-print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  table {
+    break-inside: auto;
+  }
+
+  tr,
+  .print\:break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+}
