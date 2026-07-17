@@ -4,3 +4,4 @@ npm run build
 git add -A
 git commit -m "Remove Capacitor config from Vercel build"
 git push origin main
+git config --global user.email "asoomkamel193@gmail.com"
