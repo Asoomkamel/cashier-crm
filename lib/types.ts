@@ -233,15 +233,9 @@ export interface ServiceOrder {
   requestedItems?: ServiceOrderItem[];
   expectedPaymentMethod?: ExpectedPaymentMethod;
   status: ServiceOrderStatus;
-<<<<<<< HEAD
-  date: number; // scheduled/requested visit date-time; 0 means no visit appointment
-  visitScheduled?: boolean; // explicit marker used by the order system
-  completedAt?: number;
-=======
   date: number; // scheduled execution time for the current request; 0 means no execution appointment
   visitScheduled?: boolean; // legacy field: marks whether the current request execution was scheduled
   completedAt?: number; // actual time when the current request was completed
->>>>>>> first-project-before-orders
   scheduledPeriod?: "morning" | "evening";
   scheduledHour?: string;
   nextMaintenanceDate?: number; // future maintenance visit planned after completing the current request

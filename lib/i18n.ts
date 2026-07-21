@@ -8,11 +8,7 @@ const dict = {
   nav_dashboard: { en: "Dashboard", ar: "لوحة التحكم" },
   nav_pos: { en: "POS", ar: "نقطة البيع" },
   nav_urgent: { en: "Order System", ar: "نظام الطلبات" },
-<<<<<<< HEAD
-  nav_urgent_orders: { en: "Urgent Orders", ar: "الطلبات العاجلة" },
-=======
   nav_urgent_orders: { en: "Current Orders", ar: "الطلبات الحالية" },
->>>>>>> first-project-before-orders
   nav_completed_orders: { en: "Completed Orders", ar: "طلبات مكتملة" },
   nav_appointments: { en: "Appointments", ar: "المواعيد" },
   nav_tech_inventory: { en: "Technician Inventory", ar: "مخزون الفنيين" },
