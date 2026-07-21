@@ -49,7 +49,7 @@
 
 ```env
 # Core Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://cotftgifpyfwzswddhyg.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon_key>
 SUPABASE_SERVICE_ROLE_KEY=<service_role_key>
 

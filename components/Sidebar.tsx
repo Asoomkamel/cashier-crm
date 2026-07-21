@@ -55,6 +55,18 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; 
   const isSupervisor = activeUser?.role === "supervisor";
   const isTechnician = activeUser?.role === "technician";
   const initials = (activeUser?.name || "?").trim().slice(0, 1).toUpperCase();
+  const roleLabel = settings.language === "ar"
+    ? ({ admin: "مدير", supervisor: "مشرف", technician: "فني", pos: "نقطة بيع" } as Record<string, string>)[activeUser?.role || ""] || activeUser?.role
+    : activeUser?.role;
+  const [orderSection, setOrderSection] = React.useState<"urgent" | "completed">("urgent");
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setOrderSection(window.location.hash === "#completed" ? "completed" : "urgent");
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
 
   // Branch selector (admin/supervisor only)
   const branches = settings.branches || [];
@@ -110,8 +122,63 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; 
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
           {visibleNav.map((item) => {
-            const active = pathname === item.href;
+            const isOrderSystem = item.href === "/urgent-orders";
+            const active = isOrderSystem ? pathname.startsWith("/urgent-orders") : pathname === item.href;
             const Icon = item.icon;
+
+            if (isOrderSystem) {
+              return (
+                <div key={item.href} className="space-y-0.5">
+                  <Link
+                    href="/urgent-orders"
+                    onClick={() => {
+                      setOrderSection("urgent");
+                      onClose();
+                    }}
+                    className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      active
+                        ? "bg-gradient-to-r from-brand-400 to-brand-600 text-white shadow-md shadow-brand-900/40"
+                        : "text-white/65 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 shrink-0 ${active ? "text-white" : "text-brand-300 group-hover:text-white"}`} />
+                    <span className="truncate">{t("nav_urgent")}</span>
+                  </Link>
+
+                  <div className="ms-7 space-y-0.5 border-s border-white/15 ps-2">
+                    <Link
+                      href="/urgent-orders#urgent"
+                      onClick={() => {
+                        setOrderSection("urgent");
+                        onClose();
+                      }}
+                      className={`block rounded-md px-3 py-1.5 text-xs transition-colors ${
+                        active && orderSection === "urgent"
+                          ? "bg-white/15 font-semibold text-white"
+                          : "text-white/55 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      {t("nav_urgent_orders")}
+                    </Link>
+                    <Link
+                      href="/urgent-orders#completed"
+                      onClick={() => {
+                        setOrderSection("completed");
+                        onClose();
+                      }}
+                      className={`block rounded-md px-3 py-1.5 text-xs transition-colors ${
+                        active && orderSection === "completed"
+                          ? "bg-white/15 font-semibold text-white"
+                          : "text-white/55 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      {t("nav_completed_orders")}
+                    </Link>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
@@ -161,7 +228,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; 
             <div className="min-w-0 leading-tight">
               <div className="truncate text-sm font-medium">{activeUser?.name}</div>
               <div className="truncate text-xs capitalize text-white/50">
-                {activeUser?.role}
+                {roleLabel}
                 {!showBranchSelector && (activeBranch || branches[0]) ? ` • ${activeBranch || branches[0]}` : ""}
               </div>
             </div>

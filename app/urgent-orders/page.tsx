@@ -25,17 +25,17 @@ import { saveToSupabaseBackup } from "@/lib/supabaseBackup";
 import { buildFullPayload } from "@/lib/fullPayload";
 import { NORMALIZED_TABLES_READY } from "@/lib/featureFlags";
 import { confirmWithAdminPassword } from "@/lib/security";
-
-const STATUS_TONE: Record<ServiceOrderStatus, "amber" | "blue" | "green" | "red" | "slate"> = {
-  pending: "amber",
-  started: "blue",
-  in_progress: "blue",
-  completed: "green",
-  canceled: "red",
-  deferred: "slate",
-};
+import {
+  SERVICE_ORDER_STATUSES,
+  hasVisitAppointment,
+  requestTypeLabel as getRequestTypeLabel,
+  serviceOrderStatusLabel,
+  serviceOrderStatusTone,
+  toDateTimeLocal,
+} from "@/lib/serviceOrderLabels";
 
 type Step = 1 | 2 | 3 | 4 | 5;
+type OrderView = "urgent" | "completed";
 type TemplateTarget = { order: ServiceOrder; to: "customer" | "technician" } | null;
 
 interface NewCustomerForm {
@@ -198,6 +198,7 @@ export default function UrgentOrdersPage() {
   const [rescheduling, setRescheduling] = useState<ServiceOrder | null>(null);
   const [newDate, setNewDate] = useState("");
   const [priceSuggestion, setPriceSuggestion] = useState<number | null>(null);
+  const [orderView, setOrderView] = useState<OrderView>("urgent");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -209,6 +210,26 @@ export default function UrgentOrdersPage() {
       window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
     }
   }, [canAdminRequests]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncViewFromHash = () => {
+      setOrderView(window.location.hash === "#completed" ? "completed" : "urgent");
+    };
+
+    syncViewFromHash();
+    window.addEventListener("hashchange", syncViewFromHash);
+    return () => window.removeEventListener("hashchange", syncViewFromHash);
+  }, []);
+
+  const changeOrderView = (view: OrderView) => {
+    setOrderView(view);
+    if (typeof window !== "undefined") {
+      const hash = view === "completed" ? "#completed" : "#urgent";
+      window.history.replaceState({}, "", `${window.location.pathname}${hash}`);
+    }
+  };
 
   const selectedCustomer = customers.find((c) => c.id === form.customerId);
   const customerLocations = selectedCustomer?.locations || [];
@@ -235,7 +256,24 @@ export default function UrgentOrdersPage() {
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
     return urgentOrders.filter((order) => {
-      if (isTechnician && !isEligibleForTechnician(order, activeUser)) return false;
+      const matchesView = orderView === "completed"
+        ? order.status === "completed"
+        : order.status !== "completed";
+      if (!matchesView) return false;
+
+      if (isTechnician) {
+        if (orderView === "completed") {
+          const belongsToTechnician =
+            order.acceptedByTechnicianId === activeUser?.id ||
+            order.technicianId === activeUser?.id ||
+            order.acceptedByTechnicianName === activeUser?.name ||
+            order.technicianName === activeUser?.name;
+          if (!belongsToTechnician) return false;
+        } else if (!isEligibleForTechnician(order, activeUser)) {
+          return false;
+        }
+      }
+
       if (!q) return true;
       return (
         (order.customerName || "").toLowerCase().includes(q) ||
@@ -245,24 +283,12 @@ export default function UrgentOrdersPage() {
         getRequiredSpecialties(order).join(" ").toLowerCase().includes(q)
       );
     });
-  }, [urgentOrders, search, activeUser, isTechnician]);
+  }, [urgentOrders, orderView, search, activeUser, isTechnician]);
 
-  const statusLabel = (status: ServiceOrderStatus) => ({
-    pending: ar ? "قيد الانتظار" : "Pending",
-    started: ar ? "تم القبول" : "Accepted",
-    in_progress: ar ? "قيد التنفيذ" : "In progress",
-    completed: ar ? "تم" : "Completed",
-    canceled: ar ? "ملغي" : "Canceled",
-    deferred: ar ? "مؤجل" : "Deferred",
-  }[status] || status);
-
-  const requestTypeLabel = (type?: RequestType | "") => ({
-    new_installation: ar ? "تركيب جديد" : "New installation",
-    maintenance: ar ? "صيانة دورية" : "Maintenance",
-    inspection: ar ? "فحص وحل مشكلة" : "Inspection",
-    urgent_visit: ar ? "زيارة عاجلة" : "Urgent visit",
-    "": "",
-  }[type || ""] || type || "");
+  const statusLabel = (status: ServiceOrderStatus) => serviceOrderStatusLabel(status, ar ? "ar" : "en");
+  const requestTypeLabel = (type?: RequestType | "") => getRequestTypeLabel(type, ar ? "ar" : "en");
+  const urgentCount = urgentOrders.filter((order) => order.status !== "completed").length;
+  const completedCount = urgentOrders.filter((order) => order.status === "completed").length;
 
   const selectCustomer = (customer: Customer) => {
     set({ customerId: customer.id, customerName: customer.name, customerPhone: customer.phone, locationId: "", addingNewCustomer: false });
@@ -470,8 +496,14 @@ export default function UrgentOrdersPage() {
       marketerPhone: form.marketerPhone || undefined,
       notes: form.notes || undefined,
       status: "pending",
-      date: buildTimestamp(form.scheduledDay, form.scheduledPeriod, form.scheduledHour),
-      activityLogs: [{ date: Date.now(), text: ar ? "تم إنشاء الطلب بواسطة الإدارة" : "Request created by admin" }],
+      date: form.scheduledDay ? buildTimestamp(form.scheduledDay, form.scheduledPeriod, form.scheduledHour) : 0,
+      visitScheduled: Boolean(form.scheduledDay),
+      activityLogs: [{
+        date: Date.now(),
+        text: form.scheduledDay
+          ? (ar ? "تم إنشاء الطلب وتحديد موعد الزيارة" : "Request created with a visit appointment")
+          : (ar ? "تم إنشاء الطلب بدون موعد زيارة" : "Request created without a visit appointment"),
+      }],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -513,8 +545,9 @@ export default function UrgentOrdersPage() {
     setUrgentOrders(urgentOrders.map((order) => order.id === id ? {
       ...order,
       status,
+      completedAt: status === "completed" ? order.completedAt || Date.now() : undefined,
       updatedAt: Date.now(),
-      activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `تغيرت الحالة إلى ${statusLabel(status)}` : `Status → ${status}` }],
+      activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `تغيرت الحالة إلى ${statusLabel(status)}` : `Status → ${statusLabel(status)}` }],
     } : order));
   };
 
@@ -543,6 +576,7 @@ export default function UrgentOrdersPage() {
     setUrgentOrders(urgentOrders.map((order) => order.id === rescheduling.id ? {
       ...order,
       date,
+      visitScheduled: true,
       updatedAt: Date.now(),
       activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `إعادة جدولة: ${new Date(date).toLocaleString("ar-SA")}` : `Rescheduled: ${new Date(date).toLocaleString()}` }],
     } : order));
@@ -588,7 +622,8 @@ export default function UrgentOrdersPage() {
     technicianId: order.technicianId || "",
     technicianName: order.acceptedByTechnicianName || order.technicianName || (order.assignedTechnicianNames || []).join(" | "),
     status: order.status,
-    date: order.date,
+    statusArabic: serviceOrderStatusLabel(order.status, "ar"),
+    date: hasVisitAppointment(order) ? order.date : "",
     expectedAmount: order.expectedAmount || "",
     notes: order.notes || "",
   }));
@@ -601,8 +636,8 @@ export default function UrgentOrdersPage() {
     Issue: order.issue,
     Specialties: (order.requiredSpecialties || []).join(" | "),
     Technician: order.technicianName,
-    Status: statusLabel(order.status as ServiceOrderStatus),
-    Date: new Date(Number(order.date)).toLocaleString(),
+    Status: ar ? order.statusArabic : statusLabel(order.status as ServiceOrderStatus),
+    Date: order.date ? new Date(Number(order.date)).toLocaleString(ar ? "ar-SA" : "en-US") : (ar ? "بدون موعد زيارة" : "No visit date"),
     Amount: order.expectedAmount || "",
   })));
 
@@ -667,7 +702,7 @@ export default function UrgentOrdersPage() {
   return (
     <div>
       <PageTitle
-        title={t("urgent_title")}
+        title={ar ? "نظام الطلبات" : "Order System"}
         action={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={exportCSV}>{t("urgent_export_csv")}</Button>
@@ -683,10 +718,30 @@ export default function UrgentOrdersPage() {
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importXlsx} />
               </label>
             )}
-            {canAdminRequests && <Button onClick={() => { setOpen(true); setCurrentStep(1); }}>{t("urgent_new")}</Button>}
+            {canAdminRequests && orderView === "urgent" && <Button onClick={() => { setOpen(true); setCurrentStep(1); }}>{ar ? "+ طلب جديد" : "+ New request"}</Button>}
           </div>
         }
       />
+
+      <Card className="mb-4 p-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => changeOrderView("urgent")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${orderView === "urgent" ? "bg-brand-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          >
+            {ar ? "الطلبات العاجلة" : "Urgent orders"} ({urgentCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => changeOrderView("completed")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${orderView === "completed" ? "bg-green-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          >
+            {ar ? "طلبات مكتملة" : "Completed orders"} ({completedCount})
+          </button>
+        </div>
+      </Card>
+
       {syncMessage && (
         <div className={`mx-3 mb-3 rounded-lg px-3 py-2 text-sm ${syncMessage.startsWith("✅") ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
           {syncMessage}
@@ -695,7 +750,7 @@ export default function UrgentOrdersPage() {
 
       {excelImportStatus && <Card className="mb-4 text-sm text-slate-600">{excelImportStatus}</Card>}
 
-      {isTechnician && (
+      {isTechnician && orderView === "urgent" && (
         <Card className="mb-4 border border-amber-200 bg-amber-50 text-sm text-amber-800">
           {ar ? "هذه القائمة تعرض الطلبات المؤهلة لك فقط. بعد القبول تنتقل المهمة إلى صفحة مهامي وتختفي من هنا." : "This list shows eligible requests only. Accepted requests move to My Tasks."}
         </Card>
@@ -707,7 +762,10 @@ export default function UrgentOrdersPage() {
           {visibleOrders.slice().reverse().map((order) => {
             const required = getRequiredSpecialties(order);
             return (
-              <tr key={order.id} className="border-b border-slate-100 align-top">
+              <tr
+                key={order.id}
+                className={`border-b align-top ${hasVisitAppointment(order) ? "border-slate-100" : "border-red-200 bg-red-50"}`}
+              >
                 <td className="px-2 py-2 text-xs font-medium text-slate-500">{order.requestNumber}</td>
                 <td className="px-2 py-2">
                   <div className="font-medium">{order.customerName}</div>
@@ -741,14 +799,20 @@ export default function UrgentOrdersPage() {
                 <td className="px-2 py-2">
                   {canAdminRequests && (
                     <Select value={order.status} onChange={(e) => updateStatus(order.id, e.target.value as ServiceOrderStatus)} className="mb-1 text-xs">
-                      {(["pending", "started", "in_progress", "completed", "canceled", "deferred"] as ServiceOrderStatus[]).map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+                      {SERVICE_ORDER_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
                     </Select>
                   )}
-                  <Badge tone={STATUS_TONE[order.status] || "amber"}>{statusLabel(order.status)}</Badge>
+                  <Badge tone={serviceOrderStatusTone(order.status)}>{statusLabel(order.status)}</Badge>
                 </td>
                 <td className="px-2 py-2 text-xs">
-                  {new Date(order.date).toLocaleDateString(ar ? "ar-SA" : "en-US", { weekday: "short", month: "short", day: "numeric" })}
-                  {order.scheduledPeriod && <div className="text-slate-400">{order.scheduledPeriod === "morning" ? (ar ? "صباحاً" : "AM") : (ar ? "مساءً" : "PM")} {order.scheduledHour || ""}</div>}
+                  {hasVisitAppointment(order) ? (
+                    <>
+                      {new Date(order.date).toLocaleDateString(ar ? "ar-SA" : "en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      {order.scheduledPeriod && <div className="text-slate-400">{order.scheduledPeriod === "morning" ? (ar ? "صباحاً" : "AM") : (ar ? "مساءً" : "PM")} {order.scheduledHour || ""}</div>}
+                    </>
+                  ) : (
+                    <Badge tone="red">{ar ? "بدون موعد زيارة" : "No visit date"}</Badge>
+                  )}
                   {order.expectedAmount !== undefined && <div className="mt-1 font-medium text-green-700">{order.expectedAmount.toFixed(2)} {settings.currency}</div>}
                 </td>
                 <td className="px-2 py-2">
@@ -773,7 +837,7 @@ export default function UrgentOrdersPage() {
                     {isTechnician && (
                       <button onClick={() => acceptOrder(order)} title={ar ? "قبول" : "Accept"} className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700">✓</button>
                     )}
-                    {canAdminRequests && <button className="px-1 text-xs text-brand-600 hover:underline" onClick={() => { setRescheduling(order); setNewDate(""); }}>{t("urgent_reschedule")}</button>}
+                    {canAdminRequests && <button className="px-1 text-xs text-brand-600 hover:underline" onClick={() => { setRescheduling(order); setNewDate(toDateTimeLocal(hasVisitAppointment(order) ? order.date : undefined)); }}>{t("urgent_reschedule")}</button>}
                     {canAdminRequests && <button className="px-1 text-xs text-red-600 hover:underline" onClick={() => remove(order.id)}>{t("delete")}</button>}
                   </div>
                 </td>
@@ -781,7 +845,13 @@ export default function UrgentOrdersPage() {
             );
           })}
         </Table>
-        {visibleOrders.length === 0 && <p className="mt-3 text-sm text-slate-400">{t("urgent_no_orders")}</p>}
+        {visibleOrders.length === 0 && (
+          <p className="mt-3 text-center text-sm text-slate-400">
+            {orderView === "completed"
+              ? (ar ? "لا توجد طلبات مكتملة بعد." : "No completed orders yet.")
+              : (ar ? "لا توجد طلبات عاجلة مطابقة." : "No matching urgent orders.")}
+          </p>
+        )}
       </Card>
 
       <Modal open={open} onClose={closeModal} title={`${t("urgent_new_title")} — ${stepTitles[currentStep - 1]}`}>

@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
 import { runAssistantCommand } from "@/lib/assistant";
 import { Customer, CatalogItem, ServiceOrder, uid } from "@/lib/types";
+import { serviceOrderStatusLabel } from "@/lib/serviceOrderLabels";
 
 interface Message {
   role: "user" | "assistant";
@@ -77,8 +78,8 @@ export default function AIAssistant() {
           id: uid("urg"), requestNumber: settings.nextRequestNumber,
           customerId: match?.id, customerName: match?.name || "Unknown",
           customerPhone: action.phone, issue: action.issue,
-          status: "pending", date: Date.now(),
-          activityLogs: [{ date: Date.now(), text: "Created via AI Assistant" }],
+          status: "pending", date: 0, visitScheduled: false,
+          activityLogs: [{ date: Date.now(), text: settings.language === "ar" ? "تم إنشاء الطلب بواسطة المساعد بدون موعد زيارة" : "Created by AI Assistant without a visit appointment" }],
           createdAt: Date.now(),
         };
         setUrgentOrders([...urgentOrders, o]);
@@ -87,7 +88,12 @@ export default function AIAssistant() {
       case "update_order_status": {
         const validStatuses = ["pending", "started", "in_progress", "completed", "canceled"];
         const status = validStatuses.includes(action.status) ? (action.status as ServiceOrder["status"]) : "pending";
-        const entry = { date: Date.now(), text: `Status changed to ${status} via AI Assistant` };
+        const entry = {
+          date: Date.now(),
+          text: settings.language === "ar"
+            ? `تم تغيير الحالة إلى ${serviceOrderStatusLabel(status, "ar")} بواسطة المساعد`
+            : `Status changed to ${serviceOrderStatusLabel(status, "en")} via AI Assistant`,
+        };
         if (urgentOrders.some((o) => o.requestNumber === action.requestNumber)) {
           setUrgentOrders(urgentOrders.map((o) => (o.requestNumber === action.requestNumber ? { ...o, status, activityLogs: [...o.activityLogs, entry] } : o)));
         } else if (appointments.some((o) => o.requestNumber === action.requestNumber)) {

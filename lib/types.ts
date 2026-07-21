@@ -233,7 +233,9 @@ export interface ServiceOrder {
   requestedItems?: ServiceOrderItem[];
   expectedPaymentMethod?: ExpectedPaymentMethod;
   status: ServiceOrderStatus;
-  date: number; // scheduled/requested date-time
+  date: number; // scheduled/requested visit date-time; 0 means no visit appointment
+  visitScheduled?: boolean; // explicit marker used by the order system
+  completedAt?: number;
   scheduledPeriod?: "morning" | "evening";
   scheduledHour?: string;
   nextMaintenanceDate?: number;

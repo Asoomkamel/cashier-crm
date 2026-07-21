@@ -530,7 +530,7 @@ export default function POSPage() {
   const invoiceWhatsAppMessage = (order: Order) => {
     const locale = settings.language === "ar" ? "ar-SA" : "en-US";
     const nextMaintenance = order.nextMaintenanceDate || order.scheduledMaintenanceDate;
-    const nextMaintenanceLine = nextMaintenance ? `موعد الصيانة القادم: ${new Date(nextMaintenance).toLocaleDateString(locale)}` : "";
+    const nextMaintenanceLine = nextMaintenance ? `موعد الزيارة القادم: ${new Date(nextMaintenance).toLocaleDateString(locale)}` : "";
     const fallback = "مرحبًا {اسم_العميل}\nتم إصدار فاتورتكم رقم {رقم_الفاتورة}\nالإجمالي: {الإجمالي} {العملة}\n{موعد_الصيانة_القادم}\nشكرًا لكم.";
     return (settings.invoiceWhatsAppTemplate || fallback)
       .replaceAll("{اسم_العميل}", order.customerName || "")

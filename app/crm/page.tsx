@@ -10,6 +10,7 @@ import { IconMapPin } from "@/components/icons";
 import { downloadWorkbookXlsx, makeXlsxFileName } from "@/lib/xlsxExport";
 import { importStatusMessage, importWorkbookToSystem } from "@/lib/xlsxPageActions";
 import { NORMALIZED_TABLES_READY } from "@/lib/featureFlags";
+import { serviceOrderStatusLabel } from "@/lib/serviceOrderLabels";
 
 const EMPTY: Partial<Customer> = { name: "", phone: "", type: "lead", companyName: "", taxNumber: "", locations: [] };
 
@@ -602,7 +603,7 @@ export default function CRMPage() {
                   <tr key={task.id} className="border-b border-slate-100">
                     <td className="px-2 py-2">{task.requestNumber}</td>
                     <td className="px-2 py-2 text-xs">{new Date(task.date).toLocaleDateString()}</td>
-                    <td className="px-2 py-2 text-xs">{task.status}</td>
+                    <td className="px-2 py-2 text-xs">{serviceOrderStatusLabel(task.status, ar ? "ar" : "en")}</td>
                     <td className="px-2 py-2 text-xs text-slate-500">{task.technicianName || task.acceptedByTechnicianName || "—"}</td>
                   </tr>
                 ))}
@@ -674,7 +675,7 @@ export default function CRMPage() {
                     <tr key={task.id}>
                       <td className="py-1">{task.requestNumber}</td>
                       <td className="py-1">{new Date(task.date).toLocaleDateString()}</td>
-                      <td className="py-1">{task.status}</td>
+                      <td className="py-1">{serviceOrderStatusLabel(task.status, ar ? "ar" : "en")}</td>
                       <td className="py-1">{task.technicianName || task.acceptedByTechnicianName || "—"}</td>
                     </tr>
                   ))}

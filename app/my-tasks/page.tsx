@@ -313,7 +313,7 @@ export default function MyTasksPage() {
 
   const invoiceWhatsAppMessage = (order: Order) => {
     const nextMaintenance = order.nextMaintenanceDate || order.scheduledMaintenanceDate;
-    const nextMaintenanceLine = nextMaintenance ? `موعد الصيانة القادم: ${new Date(nextMaintenance).toLocaleDateString(ar ? "ar-SA" : "en-US")}` : "";
+    const nextMaintenanceLine = nextMaintenance ? `موعد الزيارة القادم: ${new Date(nextMaintenance).toLocaleDateString(ar ? "ar-SA" : "en-US")}` : "";
     const fallback = "مرحبًا {اسم_العميل}\nتم إصدار فاتورتكم رقم {رقم_الفاتورة}\nالإجمالي: {الإجمالي} {العملة}\n{موعد_الصيانة_القادم}\nشكرًا لكم.";
     return (settings.invoiceWhatsAppTemplate || fallback)
       .replaceAll("{اسم_العميل}", order.customerName || "")
@@ -440,7 +440,7 @@ export default function MyTasksPage() {
       <Modal open={!!invoiceModal} onClose={() => { setInvoiceModal(null); setCreatedInvoice(null); }} title={ar ? "طباعة فاتورة المهمة" : "Task invoice"}>
         {invoiceModal && <div className="space-y-3">
           <div className="rounded-lg bg-slate-50 p-3 text-sm"><div>{ar ? "العميل" : "Customer"}: {invoiceModal.customerName}</div><div>{ar ? "نوع الطلب" : "Invoice type"}: {ar ? "فاتورة تلقائي" : "Automatic invoice"}</div><div>{ar ? "الفني" : "Technician"}: {techName}</div></div>
-          <div><label className="mb-1 block text-sm font-medium">{ar ? "موعد الصيانة القادم" : "Next maintenance"}</label><Select value={maintenanceMonths} onChange={(e) => setMaintenanceMonths(e.target.value)}>{(settings.maintenanceReminderOptions || []).map((option) => <option key={`${option.label}-${option.months}`} value={option.months}>{option.label}</option>)}</Select></div>
+          <div><label className="mb-1 block text-sm font-medium">{ar ? "موعد الزيارة القادم" : "Next visit"}</label><Select value={maintenanceMonths} onChange={(e) => setMaintenanceMonths(e.target.value)}>{(settings.maintenanceReminderOptions || []).map((option) => <option key={`${option.label}-${option.months}`} value={option.months}>{option.label}</option>)}</Select></div>
           <div className="rounded-lg border border-slate-200 p-2 text-sm"><div className="mb-2 font-medium">{ar ? "بيانات المنتج / الخدمة" : "Products / services"}</div>{renderInvoiceItems(invoiceModal)}</div>
           {!createdInvoice ? <Button onClick={createInvoiceFromTask}>{ar ? "إنشاء وطباعة الفاتورة" : "Create and print invoice"}</Button> : <><div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" onClick={() => window.print()}>{ar ? "طباعة" : "Print"}</Button><Button variant="secondary" onClick={() => sendInvoiceWhatsApp(createdInvoice)}>{ar ? "إرسال واتساب" : "Send WhatsApp"}</Button><Button onClick={() => printAndSendInvoice(createdInvoice)}>{ar ? "طباعة وإرسال" : "Print & send"}</Button></div><div className="overflow-x-auto"><InvoicePrint order={createdInvoice} settings={settings} customer={customers.find((customer) => customer.id === createdInvoice.customerId)} /></div></>}
         </div>}

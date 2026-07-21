@@ -2,6 +2,7 @@
 
 import React from "react";
 import { AppSettings, Expense, Order, ServiceOrder, TechFinancialLog, TechInventoryItem } from "@/lib/types";
+import { serviceOrderStatusLabel } from "@/lib/serviceOrderLabels";
 
 function money(value: number, currency: string) {
   return `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -75,7 +76,7 @@ export default function PrintTechnicianStatement({
         <thead><tr className="bg-slate-100"><th className="border p-2">التاريخ</th><th className="border p-2">رقم الطلب</th><th className="border p-2">العميل</th><th className="border p-2">التفاصيل</th><th className="border p-2">الحالة</th></tr></thead>
         <tbody>
           {serviceOrders.length === 0 ? <tr><td className="border p-3 text-center" colSpan={5}>لا توجد عمليات</td></tr> : serviceOrders.map((order) => (
-            <tr key={order.id}><td className="border p-2">{dateLabel(order.date || order.createdAt)}</td><td className="border p-2">{order.requestNumber}</td><td className="border p-2">{order.customerName}</td><td className="border p-2">{order.issue || order.serviceDescription || "-"}</td><td className="border p-2">{order.status}</td></tr>
+            <tr key={order.id}><td className="border p-2">{dateLabel(order.date || order.createdAt)}</td><td className="border p-2">{order.requestNumber}</td><td className="border p-2">{order.customerName}</td><td className="border p-2">{order.issue || order.serviceDescription || "-"}</td><td className="border p-2">{serviceOrderStatusLabel(order.status, "ar")}</td></tr>
           ))}
         </tbody>
       </table>
