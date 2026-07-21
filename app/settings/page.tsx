@@ -449,7 +449,7 @@ export default function SettingsPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 font-semibold">{ar ? "قوالب موعد الصيانة القادم" : "Next maintenance options"}</h2>
+            <h2 className="mb-3 font-semibold">{ar ? "قوالب موعد الزيارة القادم" : "Next visit options"}</h2>
             <p className="mb-3 text-xs text-slate-500">{ar ? "تظهر هذه الخيارات للفني عند طباعة فاتورة من مهمة مكتملة، ويتم احتساب الموعد القادم تلقائيًا من تاريخ اليوم." : "These options appear when a technician prints an invoice from a completed task."}</p>
             <div className="mb-3 flex flex-wrap gap-2">
               {(local.maintenanceReminderOptions || []).map((x) => (

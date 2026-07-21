@@ -51,16 +51,11 @@ async function tableExists(
   table: string
 ) {
   if (!admin) return false;
-  const { data, error } = await admin.rpc("check_table_exists" as never, {
-    p_table: table,
-  } as never);
-  if (!error && data !== null) return Boolean(data);
-  // Fallback: try a direct query
-  const { error: e2 } = await admin
+  const { error } = await admin
     .from(table)
-    .select("*", { count: "exact", head: true })
-    .limit(0);
-  return !e2;
+    .select("id", { count: "exact", head: true })
+    .limit(1);
+  return !error;
 }
 
 async function rlsEnabled(
@@ -68,13 +63,14 @@ async function rlsEnabled(
   table: string
 ): Promise<boolean> {
   if (!admin) return false;
-  // Use RPC to check RLS status — pg_tables may not be accessible via REST
-  const { data, error } = await admin.rpc("check_rls_enabled" as never, {
-    p_table: table,
-  } as never);
-  if (!error && data !== null) return Boolean(data);
-  // Fallback: assume RLS is enabled if we already applied migrations
-  return false;
+  const { data, error } = await admin
+    .from("pg_tables")
+    .select("rowsecurity")
+    .eq("schemaname", "public")
+    .eq("tablename", table)
+    .single();
+  if (error || !data) return false;
+  return Boolean((data as Record<string, unknown>).rowsecurity);
 }
 
 async function checkoutRpcReady(

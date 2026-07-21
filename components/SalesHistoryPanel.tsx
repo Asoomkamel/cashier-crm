@@ -12,7 +12,7 @@ import { importStatusMessage, importWorkbookToSystem } from "@/lib/xlsxPageActio
 
 function invoiceWhatsAppMessage(order: Order, template: string, currency: string, locale: string) {
   const nextMaintenance = order.nextMaintenanceDate || order.scheduledMaintenanceDate;
-  const nextMaintenanceLine = nextMaintenance ? `موعد الصيانة القادم: ${new Date(nextMaintenance).toLocaleDateString(locale)}` : "";
+  const nextMaintenanceLine = nextMaintenance ? `موعد الزيارة القادم: ${new Date(nextMaintenance).toLocaleDateString(locale)}` : "";
   const fallback = "مرحبًا {اسم_العميل}\nتم إصدار فاتورتكم رقم {رقم_الفاتورة}\nالإجمالي: {الإجمالي} {العملة}\n{موعد_الصيانة_القادم}\nشكرًا لكم.";
   return (template || fallback)
     .replaceAll("{اسم_العميل}", order.customerName || "")
@@ -22,6 +22,22 @@ function invoiceWhatsAppMessage(order: Order, template: string, currency: string
     .replaceAll("{موعد_الصيانة_القادم}", nextMaintenanceLine)
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function invoiceTypeLabel(type: Order["type"], ar: boolean): string {
+  return {
+    tax_invoice: ar ? "فاتورة ضريبية" : "Tax invoice",
+    quotation: ar ? "عرض سعر" : "Quotation",
+    return_invoice: ar ? "فاتورة مرتجع" : "Return invoice",
+  }[type];
+}
+
+function invoiceStatusLabel(status: Order["status"], ar: boolean): string {
+  return {
+    active: ar ? "نشطة" : "Active",
+    returned: ar ? "مرتجعة" : "Returned",
+    deleted: ar ? "محذوفة" : "Deleted",
+  }[status];
 }
 
 function periodStart(periodFilter: string) {
@@ -143,10 +159,10 @@ export default function SalesHistoryPanel() {
           <tr key={order.id} className="border-b border-slate-100">
             <td className="px-2 py-2 font-medium">{order.invoiceNumber}</td>
             <td className="px-2 py-2">{order.customerName}</td>
-            <td className="px-2 py-2">{order.type}</td>
+            <td className="px-2 py-2">{invoiceTypeLabel(order.type, ar)}</td>
             <td className="px-2 py-2 text-xs">{new Date(order.date).toLocaleDateString(ar ? "ar-SA" : "en-US")}</td>
             <td className="px-2 py-2">{order.grandTotal.toFixed(2)} {settings.currency}</td>
-            <td className="px-2 py-2 capitalize">{order.status}</td>
+            <td className="px-2 py-2">{invoiceStatusLabel(order.status, ar)}</td>
             <td className="px-2 py-2 text-right">
               <div className="flex flex-wrap justify-end gap-2">
                 {order.status !== "deleted" && (

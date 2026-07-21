@@ -1,0 +1,71 @@
+167-
+168-  const filtered = useMemo(() => {
+169-    const list = orders.filter((o) => {
+170-      const c = customers.find((cust) => cust.id === o.customerId);
+171-      const phoneMatch = c ? c.phone.includes(searchTerm) : false;
+172:      return (
+173-        o.customerName.includes(searchTerm) ||
+174-        o.issue.includes(searchTerm) ||
+175-        phoneMatch
+176-      );
+177-    });
+--
+331-    setCustomerSearchTerm("");
+332-    setEditingOrderData(null);
+333-    setShowAddDialog(false);
+334-  };
+335-
+336:  return (
+337-    <div className="space-y-4 h-full flex flex-col">
+338-      <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5">
+339-        <div className="flex items-center gap-4 flex-1 max-w-3xl">
+340-          <div className="relative flex-1">
+341-            <Search className="absolute right-3 top-2.5 h-4 w-4 text-white/40" />
+--
+433-                        const prevSales = salesOrders.filter(
+434-                          (o) =>
+435-                            o.customerId === customer.id &&
+436-                            o.type === "tax_invoice",
+437-                        );
+438:                        return (
+439-                          <div className="bg-black/20 p-3 rounded-lg border border-white/5 space-y-2 mt-3 animation-fade-in">
+440-                            <p className="text-xs text-blue-400 font-bold">
+441-                              نشاط العميل السابق:
+442-                            </p>
+443-                            <div className="grid grid-cols-2 gap-2 text-xs">
+--
+597-                      <SelectValue placeholder="اختر الفني..." />
+598-                    </SelectTrigger>
+599-                    <SelectContent>
+600-                      {(settings.technicians || []).map((t: any) => {
+601-                        const name = typeof t === "string" ? t : t.name;
+602:                        return (
+603-                          <SelectItem key={name} value={name}>
+604-                            {name}
+605-                          </SelectItem>
+606-                        );
+607-                      })}
+--
+782-                  countdownColor = "text-green-400 font-bold";
+783-                  rowClass = "border-white/5 hover:bg-white/[0.02]";
+784-                }
+785-              }
+786-
+787:              return (
+788-                <TableRow key={order.id} className={rowClass}>
+789-                  <TableCell className="text-white/80">
+790-                    {format(order.date, "yyyy/MM/dd HH:mm")}
+791-                  </TableCell>
+792-                  <TableCell className="font-medium text-blue-400">
+--
+1405-            ) : (
+1406-              settings.technicians.map((tech: any) => {
+1407-                const tName = typeof tech === "string" ? tech : tech.name;
+1408-                const tPhone = typeof tech === "string" ? "" : tech.phone;
+1409-
+1410:                return (
+1411-                  <Button
+1412-                    key={tName}
+1413-                    variant="outline"
+1414-                    className="w-full justify-between items-center h-auto py-3 bg-white/5 hover:bg-white/10 border-white/10"
+1415-                    onClick={async () => {

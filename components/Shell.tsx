@@ -115,7 +115,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               onClick={() => router.push("/reminders")}
               className="mb-3 flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-start text-sm text-amber-800 hover:bg-amber-100"
             >
-              <span>{settings.language === "ar" ? `لديك ${dueMaintenanceReminderCount} تذكير صيانة مستحق.` : `You have ${dueMaintenanceReminderCount} due maintenance reminder(s).`}</span>
+              <span>{settings.language === "ar" ? `لديك ${dueMaintenanceReminderCount} تذكير بموعد زيارة مستحق.` : `You have ${dueMaintenanceReminderCount} due visit reminder(s).`}</span>
               <span className="font-semibold">{settings.language === "ar" ? "عرض" : "View"}</span>
             </button>
           )}

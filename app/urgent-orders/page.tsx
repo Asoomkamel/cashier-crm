@@ -16,7 +16,7 @@ import {
   uid,
 } from "@/lib/types";
 import { renderWhatsAppTemplate, openWhatsApp, openGoogleMaps } from "@/lib/whatsapp";
-import { IconWhatsApp, IconMapPin } from "@/components/icons";
+import { IconWhatsApp, IconWhatsAppTechnician, IconMapPin } from "@/components/icons";
 import { exportToCSV } from "@/lib/csv";
 import { downloadWorkbookXlsx, makeXlsxFileName } from "@/lib/xlsxExport";
 import { readWorkbookImport } from "@/lib/xlsxImport";
@@ -25,17 +25,18 @@ import { saveToSupabaseBackup } from "@/lib/supabaseBackup";
 import { buildFullPayload } from "@/lib/fullPayload";
 import { NORMALIZED_TABLES_READY } from "@/lib/featureFlags";
 import { confirmWithAdminPassword } from "@/lib/security";
-
-const STATUS_TONE: Record<ServiceOrderStatus, "amber" | "blue" | "green" | "red" | "slate"> = {
-  pending: "amber",
-  started: "blue",
-  in_progress: "blue",
-  completed: "green",
-  canceled: "red",
-  deferred: "slate",
-};
+import {
+  SERVICE_ORDER_STATUSES,
+  fromDateTimeLocal,
+  hasExecutionAppointment,
+  requestTypeLabel as getRequestTypeLabel,
+  serviceOrderStatusLabel,
+  serviceOrderStatusTone,
+  toDateTimeLocal,
+} from "@/lib/serviceOrderLabels";
 
 type Step = 1 | 2 | 3 | 4 | 5;
+type OrderView = "urgent" | "completed";
 type TemplateTarget = { order: ServiceOrder; to: "customer" | "technician" } | null;
 
 interface NewCustomerForm {
@@ -197,7 +198,10 @@ export default function UrgentOrdersPage() {
   const [excelImportStatus, setExcelImportStatus] = useState("");
   const [rescheduling, setRescheduling] = useState<ServiceOrder | null>(null);
   const [newDate, setNewDate] = useState("");
+  const [nextVisitOrder, setNextVisitOrder] = useState<ServiceOrder | null>(null);
+  const [nextVisitDate, setNextVisitDate] = useState("");
   const [priceSuggestion, setPriceSuggestion] = useState<number | null>(null);
+  const [orderView, setOrderView] = useState<OrderView>("urgent");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -209,6 +213,26 @@ export default function UrgentOrdersPage() {
       window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
     }
   }, [canAdminRequests]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncViewFromHash = () => {
+      setOrderView(window.location.hash === "#completed" ? "completed" : "urgent");
+    };
+
+    syncViewFromHash();
+    window.addEventListener("hashchange", syncViewFromHash);
+    return () => window.removeEventListener("hashchange", syncViewFromHash);
+  }, []);
+
+  const changeOrderView = (view: OrderView) => {
+    setOrderView(view);
+    if (typeof window !== "undefined") {
+      const hash = view === "completed" ? "#completed" : "#urgent";
+      window.history.replaceState({}, "", `${window.location.pathname}${hash}`);
+    }
+  };
 
   const selectedCustomer = customers.find((c) => c.id === form.customerId);
   const customerLocations = selectedCustomer?.locations || [];
@@ -235,7 +259,24 @@ export default function UrgentOrdersPage() {
   const visibleOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
     return urgentOrders.filter((order) => {
-      if (isTechnician && !isEligibleForTechnician(order, activeUser)) return false;
+      const matchesView = orderView === "completed"
+        ? order.status === "completed"
+        : order.status !== "completed";
+      if (!matchesView) return false;
+
+      if (isTechnician) {
+        if (orderView === "completed") {
+          const belongsToTechnician =
+            order.acceptedByTechnicianId === activeUser?.id ||
+            order.technicianId === activeUser?.id ||
+            order.acceptedByTechnicianName === activeUser?.name ||
+            order.technicianName === activeUser?.name;
+          if (!belongsToTechnician) return false;
+        } else if (!isEligibleForTechnician(order, activeUser)) {
+          return false;
+        }
+      }
+
       if (!q) return true;
       return (
         (order.customerName || "").toLowerCase().includes(q) ||
@@ -245,24 +286,12 @@ export default function UrgentOrdersPage() {
         getRequiredSpecialties(order).join(" ").toLowerCase().includes(q)
       );
     });
-  }, [urgentOrders, search, activeUser, isTechnician]);
+  }, [urgentOrders, orderView, search, activeUser, isTechnician]);
 
-  const statusLabel = (status: ServiceOrderStatus) => ({
-    pending: ar ? "قيد الانتظار" : "Pending",
-    started: ar ? "تم القبول" : "Accepted",
-    in_progress: ar ? "قيد التنفيذ" : "In progress",
-    completed: ar ? "تم" : "Completed",
-    canceled: ar ? "ملغي" : "Canceled",
-    deferred: ar ? "مؤجل" : "Deferred",
-  }[status] || status);
-
-  const requestTypeLabel = (type?: RequestType | "") => ({
-    new_installation: ar ? "تركيب جديد" : "New installation",
-    maintenance: ar ? "صيانة دورية" : "Maintenance",
-    inspection: ar ? "فحص وحل مشكلة" : "Inspection",
-    urgent_visit: ar ? "زيارة عاجلة" : "Urgent visit",
-    "": "",
-  }[type || ""] || type || "");
+  const statusLabel = (status: ServiceOrderStatus) => serviceOrderStatusLabel(status, ar ? "ar" : "en");
+  const requestTypeLabel = (type?: RequestType | "") => getRequestTypeLabel(type, ar ? "ar" : "en");
+  const urgentCount = urgentOrders.filter((order) => order.status !== "completed").length;
+  const completedCount = urgentOrders.filter((order) => order.status === "completed").length;
 
   const selectCustomer = (customer: Customer) => {
     set({ customerId: customer.id, customerName: customer.name, customerPhone: customer.phone, locationId: "", addingNewCustomer: false });
@@ -470,8 +499,14 @@ export default function UrgentOrdersPage() {
       marketerPhone: form.marketerPhone || undefined,
       notes: form.notes || undefined,
       status: "pending",
-      date: buildTimestamp(form.scheduledDay, form.scheduledPeriod, form.scheduledHour),
-      activityLogs: [{ date: Date.now(), text: ar ? "تم إنشاء الطلب بواسطة الإدارة" : "Request created by admin" }],
+      date: form.scheduledDay ? buildTimestamp(form.scheduledDay, form.scheduledPeriod, form.scheduledHour) : 0,
+      visitScheduled: Boolean(form.scheduledDay),
+      activityLogs: [{
+        date: Date.now(),
+        text: form.scheduledDay
+          ? (ar ? "تم إنشاء الطلب وتحديد موعد تنفيذ الطلب" : "Request created with an execution appointment")
+          : (ar ? "تم إنشاء الطلب بدون موعد تنفيذ" : "Request created without an execution appointment"),
+      }],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -513,8 +548,9 @@ export default function UrgentOrdersPage() {
     setUrgentOrders(urgentOrders.map((order) => order.id === id ? {
       ...order,
       status,
+      completedAt: status === "completed" ? order.completedAt || Date.now() : undefined,
       updatedAt: Date.now(),
-      activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `تغيرت الحالة إلى ${statusLabel(status)}` : `Status → ${status}` }],
+      activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `تغيرت الحالة إلى ${statusLabel(status)}` : `Status → ${statusLabel(status)}` }],
     } : order));
   };
 
@@ -543,11 +579,40 @@ export default function UrgentOrdersPage() {
     setUrgentOrders(urgentOrders.map((order) => order.id === rescheduling.id ? {
       ...order,
       date,
+      visitScheduled: true,
       updatedAt: Date.now(),
-      activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `إعادة جدولة: ${new Date(date).toLocaleString("ar-SA")}` : `Rescheduled: ${new Date(date).toLocaleString()}` }],
+      activityLogs: [...(order.activityLogs || []), { date: Date.now(), text: ar ? `إعادة جدولة تنفيذ الطلب: ${new Date(date).toLocaleString("ar-SA")}` : `Order execution rescheduled: ${new Date(date).toLocaleString()}` }],
     } : order));
     setRescheduling(null);
     setNewDate("");
+  };
+
+  const saveNextVisit = () => {
+    if (!nextVisitOrder || !nextVisitDate || !canAdminRequests) return;
+
+    const timestamp = fromDateTimeLocal(nextVisitDate);
+    if (!timestamp || timestamp <= Date.now()) {
+      window.alert(ar ? "موعد الزيارة يجب أن يكون وقتاً مستقبلياً." : "The maintenance visit must be scheduled in the future.");
+      return;
+    }
+
+    setUrgentOrders(urgentOrders.map((order) => order.id === nextVisitOrder.id ? {
+      ...order,
+      nextMaintenanceDate: timestamp,
+      updatedAt: Date.now(),
+      activityLogs: [
+        ...(order.activityLogs || []),
+        {
+          date: Date.now(),
+          text: ar
+            ? `تم تحديد موعد الزيارة القادمة: ${new Date(timestamp).toLocaleString("ar-SA")}`
+            : `Next maintenance visit scheduled: ${new Date(timestamp).toLocaleString()}`,
+        },
+      ],
+    } : order));
+
+    setNextVisitOrder(null);
+    setNextVisitDate("");
   };
 
   const openTemplateChooser = (order: ServiceOrder, to: "customer" | "technician") => {
@@ -588,12 +653,14 @@ export default function UrgentOrdersPage() {
     technicianId: order.technicianId || "",
     technicianName: order.acceptedByTechnicianName || order.technicianName || (order.assignedTechnicianNames || []).join(" | "),
     status: order.status,
-    date: order.date,
+    statusArabic: serviceOrderStatusLabel(order.status, "ar"),
+    date: hasExecutionAppointment(order) ? order.date : "",
+    nextMaintenanceDate: order.nextMaintenanceDate || "",
     expectedAmount: order.expectedAmount || "",
     notes: order.notes || "",
   }));
 
-  const exportCSV = () => exportToCSV("urgent-orders.csv", exportRows().map((order) => ({
+  const exportCSV = () => exportToCSV("current-orders.csv", exportRows().map((order) => ({
     RequestNumber: order.requestNumber,
     Customer: order.customerName,
     Phone: order.customerPhone,
@@ -601,13 +668,14 @@ export default function UrgentOrdersPage() {
     Issue: order.issue,
     Specialties: (order.requiredSpecialties || []).join(" | "),
     Technician: order.technicianName,
-    Status: statusLabel(order.status as ServiceOrderStatus),
-    Date: new Date(Number(order.date)).toLocaleString(),
+    Status: ar ? order.statusArabic : statusLabel(order.status as ServiceOrderStatus),
+    ExecutionDate: order.date ? new Date(Number(order.date)).toLocaleString(ar ? "ar-SA" : "en-US") : (ar ? "بدون موعد تنفيذ" : "No execution date"),
+    NextVisitDate: order.nextMaintenanceDate ? new Date(Number(order.nextMaintenanceDate)).toLocaleString(ar ? "ar-SA" : "en-US") : (ar ? "بدون موعد زيارة قادمة" : "No future visit"),
     Amount: order.expectedAmount || "",
   })));
 
   const exportXlsx = async () => {
-    await downloadWorkbookXlsx(makeXlsxFileName("urgent-orders"), { urgentOrders: exportRows() });
+    await downloadWorkbookXlsx(makeXlsxFileName("current-orders"), { urgentOrders: exportRows() });
   };
 
   const importXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -618,7 +686,7 @@ export default function UrgentOrdersPage() {
       const parsed = await readWorkbookImport(file, "urgentOrders");
       const { imported, empty } = applyBackupPayload(parsed.payload, "merge");
       if (empty) {
-        setExcelImportStatus(ar ? "لم يتم العثور على طلبات عاجلة متوافقة في الملف." : "No compatible urgent orders were found in the file.");
+        setExcelImportStatus(ar ? "لم يتم العثور على طلبات حالية متوافقة في الملف." : "No compatible current orders were found in the file.");
         return;
       }
       const cloud = await saveToSupabaseBackup(buildFullPayload());
@@ -635,7 +703,7 @@ export default function UrgentOrdersPage() {
     ar ? "العميل والموقع" : "Customer & location",
     ar ? "نوع الطلب والمنتجات" : "Request & items",
     ar ? "التسعير والدفع" : "Pricing & payment",
-    ar ? "الموعد والفني" : "Schedule & technician",
+    ar ? "موعد تنفيذ الطلب والفني" : "Order execution & technician",
     ar ? "المسوق والملاحظات" : "Marketer & notes",
   ];
 
@@ -667,7 +735,7 @@ export default function UrgentOrdersPage() {
   return (
     <div>
       <PageTitle
-        title={t("urgent_title")}
+        title={ar ? "نظام الطلبات" : "Order System"}
         action={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={exportCSV}>{t("urgent_export_csv")}</Button>
@@ -683,10 +751,30 @@ export default function UrgentOrdersPage() {
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importXlsx} />
               </label>
             )}
-            {canAdminRequests && <Button onClick={() => { setOpen(true); setCurrentStep(1); }}>{t("urgent_new")}</Button>}
+            {canAdminRequests && orderView === "urgent" && <Button onClick={() => { setOpen(true); setCurrentStep(1); }}>{ar ? "+ طلب جديد" : "+ New request"}</Button>}
           </div>
         }
       />
+
+      <Card className="mb-4 p-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => changeOrderView("urgent")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${orderView === "urgent" ? "bg-brand-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          >
+            {ar ? "الطلبات الحالية" : "Current orders"} ({urgentCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => changeOrderView("completed")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${orderView === "completed" ? "bg-green-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          >
+            {ar ? "طلبات مكتملة" : "Completed orders"} ({completedCount})
+          </button>
+        </div>
+      </Card>
+
       {syncMessage && (
         <div className={`mx-3 mb-3 rounded-lg px-3 py-2 text-sm ${syncMessage.startsWith("✅") ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
           {syncMessage}
@@ -695,7 +783,7 @@ export default function UrgentOrdersPage() {
 
       {excelImportStatus && <Card className="mb-4 text-sm text-slate-600">{excelImportStatus}</Card>}
 
-      {isTechnician && (
+      {isTechnician && orderView === "urgent" && (
         <Card className="mb-4 border border-amber-200 bg-amber-50 text-sm text-amber-800">
           {ar ? "هذه القائمة تعرض الطلبات المؤهلة لك فقط. بعد القبول تنتقل المهمة إلى صفحة مهامي وتختفي من هنا." : "This list shows eligible requests only. Accepted requests move to My Tasks."}
         </Card>
@@ -703,11 +791,18 @@ export default function UrgentOrdersPage() {
 
       <Card>
         <Input placeholder={t("search")} value={search} onChange={(e) => setSearch(e.target.value)} className="mb-3 max-w-sm" />
-        <Table headers={["#", t("customer"), ar ? "النوع / التفاصيل" : "Type / details", ar ? "المنتجات" : "Items", ar ? "التخصصات / الفني" : "Specialties / technician", t("status"), t("date"), ""]}>
+        <Table headers={["#", t("customer"), ar ? "النوع / التفاصيل" : "Type / details", ar ? "المنتجات" : "Items", ar ? "التخصصات / الفني" : "Specialties / technician", t("status"), orderView === "completed" ? (ar ? "التنفيذ / الزيارة القادمة" : "Execution / next visit") : (ar ? "موعد تنفيذ الطلب" : "Order execution"), ""]}>
           {visibleOrders.slice().reverse().map((order) => {
             const required = getRequiredSpecialties(order);
+            const missingExecutionTime = orderView === "urgent" && !hasExecutionAppointment(order);
+            const missingFutureVisit = orderView === "completed" && !order.nextMaintenanceDate;
+            const needsAttention = missingExecutionTime || missingFutureVisit;
+
             return (
-              <tr key={order.id} className="border-b border-slate-100 align-top">
+              <tr
+                key={order.id}
+                className={`border-b align-top ${needsAttention ? "border-red-200 bg-red-50" : "border-slate-100"}`}
+              >
                 <td className="px-2 py-2 text-xs font-medium text-slate-500">{order.requestNumber}</td>
                 <td className="px-2 py-2">
                   <div className="font-medium">{order.customerName}</div>
@@ -741,15 +836,44 @@ export default function UrgentOrdersPage() {
                 <td className="px-2 py-2">
                   {canAdminRequests && (
                     <Select value={order.status} onChange={(e) => updateStatus(order.id, e.target.value as ServiceOrderStatus)} className="mb-1 text-xs">
-                      {(["pending", "started", "in_progress", "completed", "canceled", "deferred"] as ServiceOrderStatus[]).map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+                      {SERVICE_ORDER_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
                     </Select>
                   )}
-                  <Badge tone={STATUS_TONE[order.status] || "amber"}>{statusLabel(order.status)}</Badge>
+                  <Badge tone={serviceOrderStatusTone(order.status)}>{statusLabel(order.status)}</Badge>
                 </td>
                 <td className="px-2 py-2 text-xs">
-                  {new Date(order.date).toLocaleDateString(ar ? "ar-SA" : "en-US", { weekday: "short", month: "short", day: "numeric" })}
-                  {order.scheduledPeriod && <div className="text-slate-400">{order.scheduledPeriod === "morning" ? (ar ? "صباحاً" : "AM") : (ar ? "مساءً" : "PM")} {order.scheduledHour || ""}</div>}
-                  {order.expectedAmount !== undefined && <div className="mt-1 font-medium text-green-700">{order.expectedAmount.toFixed(2)} {settings.currency}</div>}
+                  <div className="space-y-1.5">
+                    <div>
+                      <div className="font-medium text-slate-600">{ar ? "موعد تنفيذ الطلب" : "Order execution"}</div>
+                      {hasExecutionAppointment(order) ? (
+                        <>
+                          <div>{new Date(order.date).toLocaleDateString(ar ? "ar-SA" : "en-US", { weekday: "short", month: "short", day: "numeric" })}</div>
+                          {order.scheduledPeriod && <div className="text-slate-400">{order.scheduledPeriod === "morning" ? (ar ? "صباحاً" : "AM") : (ar ? "مساءً" : "PM")} {order.scheduledHour || ""}</div>}
+                        </>
+                      ) : (
+                        <Badge tone="red">{ar ? "بدون موعد تنفيذ" : "No execution date"}</Badge>
+                      )}
+                    </div>
+
+                    {order.completedAt && (
+                      <div className="border-t border-slate-200 pt-1">
+                        <span className="font-medium text-slate-600">{ar ? "تم تنفيذ الطلب" : "Completed"}: </span>
+                        {new Date(order.completedAt).toLocaleString(ar ? "ar-SA" : "en-US")}
+                      </div>
+                    )}
+
+                    {(orderView === "completed" || order.nextMaintenanceDate) && (
+                      <div className="border-t border-slate-200 pt-1">
+                        <div className="font-medium text-brand-700">{ar ? "موعد الزيارة القادمة" : "Next maintenance visit"}</div>
+                        {order.nextMaintenanceDate ? (
+                          <div>{new Date(order.nextMaintenanceDate).toLocaleString(ar ? "ar-SA" : "en-US")}</div>
+                        ) : (
+                          <Badge tone="red">{ar ? "بدون موعد زيارة قادمة" : "No future visit"}</Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {order.expectedAmount !== undefined && <div className="mt-2 font-medium text-green-700">{order.expectedAmount.toFixed(2)} {settings.currency}</div>}
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -766,14 +890,31 @@ export default function UrgentOrdersPage() {
                       <IconWhatsApp className="h-4 w-4" />
                     </button>
                     {canAdminRequests && (order.technicianName || order.acceptedByTechnicianName) && (
-                      <button onClick={() => openTemplateChooser(order, "technician")} title={ar ? "واتساب الفني" : "WhatsApp Technician"} className="rounded-lg bg-green-50 p-1.5 text-green-700 hover:bg-green-100">
-                        <IconWhatsApp className="h-4 w-4" />
+                      <button onClick={() => openTemplateChooser(order, "technician")} title={ar ? "واتساب الفني — صيانة" : "WhatsApp Technician — Maintenance"} className="rounded-lg bg-emerald-50 p-1.5 text-emerald-800 hover:bg-emerald-100">
+                        <IconWhatsAppTechnician className="h-4 w-4" />
                       </button>
                     )}
                     {isTechnician && (
                       <button onClick={() => acceptOrder(order)} title={ar ? "قبول" : "Accept"} className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white hover:bg-green-700">✓</button>
                     )}
-                    {canAdminRequests && <button className="px-1 text-xs text-brand-600 hover:underline" onClick={() => { setRescheduling(order); setNewDate(""); }}>{t("urgent_reschedule")}</button>}
+                    {canAdminRequests && orderView === "urgent" && (
+                      <button className="px-1 text-xs text-brand-600 hover:underline" onClick={() => { setRescheduling(order); setNewDate(toDateTimeLocal(hasExecutionAppointment(order) ? order.date : undefined)); }}>
+                        {t("urgent_reschedule")}
+                      </button>
+                    )}
+                    {canAdminRequests && orderView === "completed" && (
+                      <button
+                        className={`px-1 text-xs hover:underline ${order.nextMaintenanceDate ? "text-brand-600" : "font-semibold text-red-600"}`}
+                        onClick={() => {
+                          setNextVisitOrder(order);
+                          setNextVisitDate(toDateTimeLocal(order.nextMaintenanceDate));
+                        }}
+                      >
+                        {order.nextMaintenanceDate
+                          ? (ar ? "تعديل موعد الزيارة" : "Edit next visit")
+                          : (ar ? "حدد موعد الزيارة" : "Set next visit")}
+                      </button>
+                    )}
                     {canAdminRequests && <button className="px-1 text-xs text-red-600 hover:underline" onClick={() => remove(order.id)}>{t("delete")}</button>}
                   </div>
                 </td>
@@ -781,7 +922,13 @@ export default function UrgentOrdersPage() {
             );
           })}
         </Table>
-        {visibleOrders.length === 0 && <p className="mt-3 text-sm text-slate-400">{t("urgent_no_orders")}</p>}
+        {visibleOrders.length === 0 && (
+          <p className="mt-3 text-center text-sm text-slate-400">
+            {orderView === "completed"
+              ? (ar ? "لا توجد طلبات مكتملة بعد." : "No completed orders yet.")
+              : (ar ? "لا توجد طلبات حالية مطابقة." : "No matching current orders.")}
+          </p>
+        )}
       </Card>
 
       <Modal open={open} onClose={closeModal} title={`${t("urgent_new_title")} — ${stepTitles[currentStep - 1]}`}>
@@ -902,7 +1049,7 @@ export default function UrgentOrdersPage() {
           <div className="space-y-4">
             <SectionHeader step={4} label={stepTitles[3]} />
             <div>
-              <label className="mb-2 block text-sm font-medium">{ar ? "تاريخ الموعد" : "Schedule date"}</label>
+              <label className="mb-2 block text-sm font-medium">{ar ? "موعد تنفيذ الطلب" : "Order execution date"}</label>
               {!form.useCustomDate ? <div className="flex flex-wrap gap-1.5">{days7.map((day) => <button key={day.value} onClick={() => set({ scheduledDay: day.value })} className={`rounded-lg border-2 px-3 py-1.5 text-sm ${form.scheduledDay === day.value ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"}`}>{day.label}</button>)}<button onClick={() => set({ useCustomDate: true, scheduledDay: "" })} className="rounded-lg border-2 border-dashed border-slate-300 px-3 py-1.5 text-sm text-slate-500">{ar ? "تاريخ مخصص" : "Custom date"}</button></div> : <div className="flex items-center gap-2"><Input type="date" value={form.scheduledDay} onChange={(e) => set({ scheduledDay: e.target.value })} /><button onClick={() => set({ useCustomDate: false, scheduledDay: "" })} className="text-xs text-slate-400">✕</button></div>}
             </div>
             <div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-sm font-medium">{ar ? "الفترة" : "Period"}</label><div className="flex gap-2">{(["morning", "evening"] as const).map((period) => <button key={period} onClick={() => set({ scheduledPeriod: period })} className={`flex-1 rounded-lg border-2 py-2 text-sm ${form.scheduledPeriod === period ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"}`}>{period === "morning" ? (ar ? "صباحاً" : "AM") : (ar ? "مساءً" : "PM")}</button>)}</div></div><div><label className="mb-1 block text-sm font-medium">{ar ? "الساعة" : "Hour"}</label><Input type="time" value={form.scheduledHour} onChange={(e) => set({ scheduledHour: e.target.value })} /></div></div>
@@ -932,6 +1079,34 @@ export default function UrgentOrdersPage() {
 
       <Modal open={!!templateTarget} onClose={() => setTemplateTarget(null)} title={ar ? "اختيار قالب واتساب" : "WhatsApp template"}>
         {templateTarget && <div className="space-y-3"><Select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>{availableTemplates.map((template) => <option key={template.id} value={template.body}>{template.name}</option>)}</Select><Textarea rows={6} value={selectedTemplate} onChange={(e) => canAdminRequests && setSelectedTemplate(e.target.value)} readOnly={!canAdminRequests} className={!canAdminRequests ? "bg-slate-50 text-slate-500" : ""} /><div className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{renderWhatsAppTemplate(selectedTemplate || availableTemplates[0]?.body || "", templateTarget.order, settings, customers.find((customer) => customer.id === templateTarget.order.customerId))}</div><div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setTemplateTarget(null)}>{t("cancel")}</Button><Button onClick={sendTemplate}>{ar ? "فتح واتساب" : "Open WhatsApp"}</Button></div></div>}
+      </Modal>
+
+      <Modal
+        open={!!nextVisitOrder}
+        onClose={() => {
+          setNextVisitOrder(null);
+          setNextVisitDate("");
+        }}
+        title={ar ? "موعد الزيارة القادمة للصيانة" : "Next maintenance visit"}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            {ar
+              ? "هذا الموعد هو زيارة صيانة مستقبلية بعد إكمال الطلب، وليس وقت تنفيذ الطلب الحالي."
+              : "This is a future maintenance visit after the order is completed, not the current order execution time."}
+          </p>
+          <Input
+            dir={ar ? "rtl" : "ltr"}
+            type="datetime-local"
+            min={toDateTimeLocal(Date.now() + 60_000)}
+            value={nextVisitDate}
+            onChange={(e) => setNextVisitDate(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => { setNextVisitOrder(null); setNextVisitDate(""); }}>{t("cancel")}</Button>
+            <Button onClick={saveNextVisit}>{t("save")}</Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal open={!!rescheduling} onClose={() => setRescheduling(null)} title={t("urgent_reschedule_title")}>

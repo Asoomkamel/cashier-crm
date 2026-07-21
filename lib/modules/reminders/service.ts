@@ -25,8 +25,8 @@ export function isVisibleToUser(reminder: SystemReminder, user: StaffUser | null
   if (user.role === "admin") return true;
   if (reminder.assignedToUserId && reminder.assignedToUserId === user.id) return true;
   if (!reminder.assignedToRole || reminder.assignedToRole === "all") {
-    const r = user.role as string;
-    return r === "admin" || r === "supervisor";
+    const role = user.role as string;
+    return role === "admin" || role === "supervisor";
   }
   return reminder.assignedToRole === user.role;
 }
@@ -35,63 +35,117 @@ export function isReminderActionAllowed(user: StaffUser | null): boolean {
   return Boolean(user && (user.role === "admin" || user.role === "supervisor" || user.permissions?.canManageReminders));
 }
 
+/**
+ * A future maintenance visit becomes visible in the reminders module once it
+ * is seven days away or less. Overdue visits remain visible until completed or
+ * canceled.
+ */
+export function isWithinVisitReminderWindow(dueDate: number | undefined, now = Date.now()): boolean {
+  const timestamp = Number(dueDate || 0);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return false;
+
+  const endOfWindow = addDays(now, 7) + DAY - 1;
+  return timestamp <= endOfWindow;
+}
+
+function maintenanceReminderFromTask(
+  task: ServiceOrder,
+  source: "appointment" | "urgent_order",
+  now: number,
+): SystemReminder | null {
+  if (!isWithinVisitReminderWindow(task.nextMaintenanceDate, now)) return null;
+  if (task.status === "canceled") return null;
+
+  const dueDate = Number(task.nextMaintenanceDate);
+
+  return {
+    id: `auto_${source}_${task.id}`,
+    title: `موعد زيارة صيانة قادم للعميل ${task.customerName}`,
+    description: task.issue || task.serviceDescription || task.notes || undefined,
+    source,
+    sourceId: task.id,
+    customerId: task.customerId,
+    customerName: task.customerName,
+    customerPhone: task.customerPhone,
+    dueDate,
+    status: "pending",
+    priority: dueDate <= addDays(now, 2) + DAY - 1 ? "high" : "normal",
+    assignedToRole: "supervisor",
+    assignedToUserId: task.technicianId || task.acceptedByTechnicianId,
+    createdAt: task.createdAt || now,
+  };
+}
+
 export function buildAutoMaintenanceReminders(params: {
   orders: Order[];
   appointments: ServiceOrder[];
   urgentOrders: ServiceOrder[];
   customers: Customer[];
+  now?: number;
 }): SystemReminder[] {
   const { orders, appointments, urgentOrders, customers } = params;
+  const now = params.now ?? Date.now();
   const customersById = new Map(customers.map((customer) => [customer.id, customer]));
 
   const invoiceReminders = orders
-    .filter((order) => order.status === "active" && order.type !== "quotation" && (order.nextMaintenanceDate || order.scheduledMaintenanceDate))
+    .filter((order) => {
+      if (order.status !== "active" || order.type === "quotation") return false;
+      const nextVisit = order.nextMaintenanceDate || order.scheduledMaintenanceDate;
+      return isWithinVisitReminderWindow(nextVisit, now);
+    })
     .map((order): SystemReminder => {
       const customer = order.customerId ? customersById.get(order.customerId) : undefined;
+      const dueDate = Number(order.nextMaintenanceDate || order.scheduledMaintenanceDate);
+
       return {
         id: `auto_invoice_${order.id}`,
-        title: `موعد صيانة فاتورة ${order.invoiceNumber}`,
+        title: `موعد زيارة صيانة لفاتورة ${order.invoiceNumber}`,
         description: order.items.map((item) => `${item.name} × ${item.qty}`).join("، "),
         source: "invoice",
         sourceId: order.id,
         customerId: order.customerId,
         customerName: order.customerName || customer?.name,
         customerPhone: customer?.phone,
-        dueDate: order.nextMaintenanceDate || order.scheduledMaintenanceDate || Date.now(),
+        dueDate,
         status: "pending",
-        priority: "normal",
+        priority: dueDate <= addDays(now, 2) + DAY - 1 ? "high" : "normal",
         assignedToRole: "supervisor",
         createdAt: order.date,
       };
     });
 
-  const serviceReminders = [...appointments, ...urgentOrders]
-    .filter((task) => task.nextMaintenanceDate)
-    .map((task): SystemReminder => ({
-      id: `auto_task_${task.id}`,
-      title: `موعد صيانة للعميل ${task.customerName}`,
-      description: task.issue || task.notes || undefined,
-      source: task.acceptedAt ? "urgent_order" : "appointment",
-      sourceId: task.id,
-      customerId: task.customerId,
-      customerName: task.customerName,
-      customerPhone: task.customerPhone,
-      dueDate: task.nextMaintenanceDate || Date.now(),
-      status: "pending",
-      priority: "normal",
-      assignedToRole: "supervisor",
-      createdAt: task.createdAt || task.date,
-    }));
+  const appointmentMaintenanceReminders = appointments
+    .map((task) => maintenanceReminderFromTask(task, "appointment", now))
+    .filter((reminder): reminder is SystemReminder => Boolean(reminder));
 
-  return [...invoiceReminders, ...serviceReminders];
+  const currentOrderMaintenanceReminders = urgentOrders
+    .map((task) => maintenanceReminderFromTask(task, "urgent_order", now))
+    .filter((reminder): reminder is SystemReminder => Boolean(reminder));
+
+  return [
+    ...invoiceReminders,
+    ...appointmentMaintenanceReminders,
+    ...currentOrderMaintenanceReminders,
+  ];
 }
 
 export function mergeManualAndAutoReminders(manual: SystemReminder[], auto: SystemReminder[]): SystemReminder[] {
-  const manualByAutoId = new Map(manual.filter((reminder) => reminder.source !== "manual" && reminder.sourceId).map((reminder) => [`auto_${reminder.source}_${reminder.sourceId}`, reminder]));
+  const manualByAutoId = new Map(
+    manual
+      .filter((reminder) => reminder.source !== "manual" && reminder.sourceId)
+      .map((reminder) => [`auto_${reminder.source}_${reminder.sourceId}`, reminder]),
+  );
 
   const normalizedAuto = auto.map((reminder) => {
     const override = manualByAutoId.get(`auto_${reminder.source}_${reminder.sourceId}`);
-    return override ? { ...reminder, ...override, title: override.title || reminder.title, dueDate: override.dueDate || reminder.dueDate } : reminder;
+    return override
+      ? {
+          ...reminder,
+          ...override,
+          title: override.title || reminder.title,
+          dueDate: override.dueDate || reminder.dueDate,
+        }
+      : reminder;
   });
 
   const manualOnly = manual.filter((reminder) => reminder.source === "manual" || !reminder.sourceId);
@@ -113,6 +167,7 @@ export function createManualReminder(input: {
   priority?: SystemReminder["priority"];
   assignedToRole?: SystemReminder["assignedToRole"];
   createdBy?: StaffUser | null;
+  notes?: string;
 }): SystemReminder {
   return {
     id: uid("rem"),
@@ -122,10 +177,11 @@ export function createManualReminder(input: {
     customerId: input.customerId || undefined,
     customerName: input.customerName || undefined,
     customerPhone: input.customerPhone || undefined,
-    dueDate: startOfDay(input.dueDate),
+    dueDate: input.dueDate,
     status: "pending",
     priority: input.priority || "normal",
     assignedToRole: input.assignedToRole || "supervisor",
+    notes: input.notes?.trim() || undefined,
     createdByUserId: input.createdBy?.id,
     createdByName: input.createdBy?.name,
     createdAt: Date.now(),

@@ -81,7 +81,7 @@ export default function SystemHealthPage() {
     [ar ? "العملاء" : "Customers"]:          customers.length,
     [ar ? "المنتجات" : "Products"]:          catalog.length,
     [ar ? "الفواتير" : "Invoices"]:          orders.filter(o => o.status !== "deleted").length,
-    [ar ? "الطلبات العاجلة" : "Urgent orders"]: urgentOrders.length,
+    [ar ? "الطلبات الحالية" : "Current orders"]: urgentOrders.length,
     [ar ? "المواعيد" : "Appointments"]:      appointments.length,
     [ar ? "مخزون الفنيين" : "Tech inventory"]: techInventory.length,
     [ar ? "المصروفات" : "Expenses"]:         expenses.length,
