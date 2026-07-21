@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: Remix: كاشير ونظام CRM المتكامل",
+  "description": "نظام إدارة العملاء والمبيعات المتطور مع دعم الفواتير وعروض الأسعار وإدارة المخزون.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

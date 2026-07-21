@@ -57,6 +57,7 @@ export function serviceOrderStatusTone(
 }
 
 /**
+<<<<<<< HEAD
  * Determines whether a service order has a real visit appointment.
  *
  * Older builds stored Date.now() in `date` even when no visit was selected.
@@ -64,6 +65,20 @@ export function serviceOrderStatusTone(
  * creation time and has no scheduling metadata is treated as unscheduled.
  */
 export function hasVisitAppointment(order: ServiceOrder): boolean {
+=======
+ * Determines whether the current request has a scheduled execution time.
+ *
+ * `date` represents when the current request should be carried out. It is not
+ * the future maintenance visit. The future maintenance visit is stored in
+ * `nextMaintenanceDate`.
+ *
+ * Older builds stored Date.now() in `date` even when no execution time was
+ * selected. For backward compatibility, a record whose date is almost
+ * identical to its creation time and has no scheduling metadata is treated as
+ * unscheduled.
+ */
+export function hasExecutionAppointment(order: ServiceOrder): boolean {
+>>>>>>> first-project-before-orders
   if (order.visitScheduled === false) return false;
 
   const timestamp = Number(order.date);
@@ -82,6 +97,17 @@ export function hasVisitAppointment(order: ServiceOrder): boolean {
   return true;
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * @deprecated Use `hasExecutionAppointment`. Kept for imported backups and
+ * older modules that still use the previous name.
+ */
+export function hasVisitAppointment(order: ServiceOrder): boolean {
+  return hasExecutionAppointment(order);
+}
+
+>>>>>>> first-project-before-orders
 export function toDateTimeLocal(value?: number): string {
   const timestamp = Number(value || 0);
   if (!Number.isFinite(timestamp) || timestamp <= 0) return "";

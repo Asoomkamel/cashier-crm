@@ -8,7 +8,11 @@ const dict = {
   nav_dashboard: { en: "Dashboard", ar: "لوحة التحكم" },
   nav_pos: { en: "POS", ar: "نقطة البيع" },
   nav_urgent: { en: "Order System", ar: "نظام الطلبات" },
+<<<<<<< HEAD
   nav_urgent_orders: { en: "Urgent Orders", ar: "الطلبات العاجلة" },
+=======
+  nav_urgent_orders: { en: "Current Orders", ar: "الطلبات الحالية" },
+>>>>>>> first-project-before-orders
   nav_completed_orders: { en: "Completed Orders", ar: "طلبات مكتملة" },
   nav_appointments: { en: "Appointments", ar: "المواعيد" },
   nav_tech_inventory: { en: "Technician Inventory", ar: "مخزون الفنيين" },
@@ -329,28 +333,28 @@ const dict = {
   global_message_text: { en: "Message text", ar: "نص الرسالة" },
   global_improve_ai: { en: "✨ Improve with AI", ar: "✨ تحسين بالذكاء الاصطناعي" },
   global_send: { en: "Send", ar: "إرسال" },
-  global_request_created: { en: "Urgent request created.", ar: "تم إنشاء الطلب العاجل." },
+  global_request_created: { en: "Request created.", ar: "تم إنشاء الطلب." },
   global_ai_unavailable: { en: "AI improvement is not configured on this server (needs GEMINI_API_KEY).", ar: "تحسين النص بالذكاء الاصطناعي غير مفعّل (يتطلب GEMINI_API_KEY)." },
 
   urgent_title: { en: "Order System", ar: "نظام الطلبات" },
   urgent_new: { en: "+ New Request", ar: "+ طلب جديد" },
   urgent_export_csv: { en: "Export CSV", ar: "تصدير CSV" },
-  urgent_new_title: { en: "New Urgent Order", ar: "طلب عاجل جديد" },
+  urgent_new_title: { en: "New Order", ar: "طلب جديد" },
   urgent_issue: { en: "Issue / request details", ar: "تفاصيل الطلب / المشكلة" },
   urgent_expected_amount: { en: "Expected amount", ar: "المبلغ المتوقع" },
   urgent_create: { en: "Create Request", ar: "إنشاء الطلب" },
-  urgent_reschedule: { en: "Reschedule", ar: "إعادة الجدولة" },
-  urgent_reschedule_title: { en: "Reschedule Request", ar: "إعادة جدولة الطلب" },
-  urgent_new_datetime: { en: "New date & time", ar: "التاريخ والوقت الجديد" },
+  urgent_reschedule: { en: "Reschedule execution", ar: "إعادة جدولة التنفيذ" },
+  urgent_reschedule_title: { en: "Reschedule Order Execution", ar: "إعادة جدولة تنفيذ الطلب" },
+  urgent_new_datetime: { en: "New execution date & time", ar: "موعد التنفيذ الجديد" },
   urgent_wa_customer: { en: "WA Customer", ar: "واتساب للعميل" },
   urgent_wa_technician: { en: "WA Technician", ar: "واتساب للفني" },
-  urgent_no_orders: { en: "No urgent orders yet.", ar: "لا توجد طلبات عاجلة بعد." },
+  urgent_no_orders: { en: "No current orders yet.", ar: "لا توجد طلبات حالية بعد." },
 
   // New urgent order form keys
   urgent_section_customer: { en: "Customer & Location", ar: "العميل والموقع" },
   urgent_section_request: { en: "Request Type & Service", ar: "نوع الطلب والخدمة" },
   urgent_section_pricing: { en: "Pricing & Payment", ar: "التسعير والدفع" },
-  urgent_section_schedule: { en: "Schedule & Technician", ar: "الموعد والفني" },
+  urgent_section_schedule: { en: "Order Execution & Technician", ar: "موعد تنفيذ الطلب والفني" },
   urgent_section_marketer: { en: "Marketer & Notes", ar: "المسوق والملاحظات" },
 
   urgent_search_customer: { en: "Search by name or phone", ar: "ابحث بالاسم أو الجوال" },

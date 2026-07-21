@@ -59,7 +59,7 @@ export const XLSX_ARABIC_SHEET_NAMES: Record<string, string> = {
   expenses: "المصروفات",
   settings: "الإعدادات",
   users: "المستخدمون",
-  urgentOrders: "الطلبات العاجلة",
+  urgentOrders: "الطلبات الحالية",
   appointments: "المواعيد",
   techInventory: "مخزون الفنيين",
   techInventoryLogs: "حركات مخزون الفنيين",

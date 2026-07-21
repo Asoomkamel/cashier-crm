@@ -12,7 +12,11 @@ import { applyBackupPayload } from "@/lib/backupPayload";
 import { saveToSupabaseBackup } from "@/lib/supabaseBackup";
 import { buildFullPayload } from "@/lib/fullPayload";
 import { confirmWithAdminPassword } from "@/lib/security";
+<<<<<<< HEAD
 import { IconWhatsApp, IconMapPin } from "@/components/icons";
+=======
+import { IconWhatsApp, IconWhatsAppTechnician, IconMapPin } from "@/components/icons";
+>>>>>>> first-project-before-orders
 import {
   SERVICE_ORDER_STATUSES,
   fromDateTimeLocal,
@@ -480,10 +484,17 @@ export default function AppointmentsPage() {
                     {activeUser?.role !== "technician" && appointment.technicianName && (
                       <button
                         onClick={() => sendReminder(appointment, "technician")}
+<<<<<<< HEAD
                         title={ar ? "واتساب الفني" : "WhatsApp Technician"}
                         className="rounded-lg bg-green-50 p-1.5 text-green-700 transition-colors hover:bg-green-100"
                       >
                         <IconWhatsApp className="h-4 w-4" />
+=======
+                        title={ar ? "واتساب الفني — صيانة" : "WhatsApp Technician — Maintenance"}
+                        className="rounded-lg bg-emerald-50 p-1.5 text-emerald-800 transition-colors hover:bg-emerald-100"
+                      >
+                        <IconWhatsAppTechnician className="h-4 w-4" />
+>>>>>>> first-project-before-orders
                       </button>
                     )}
 
